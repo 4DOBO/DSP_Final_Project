@@ -8,8 +8,10 @@ import copy
 import itertools
 
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 import threading
+from PIL import Image, ImageTk
+
 
 def calc_landmark_list(image, landmarks):
     image_width, image_height = image.shape[1], image.shape[0]
@@ -19,7 +21,7 @@ def calc_landmark_list(image, landmarks):
     # Keypoint
     for _, landmark in enumerate(landmarks.landmark):
         landmark_x = min(int(landmark.x * image_width), image_width - 1)
-        landmark_y = min(int(landmark.y * image_height), image_height - 1)
+        landmark_y = min(int(landmark.y * image_height), image_width - 1)
         # landmark_z = landmark.z
 
         landmark_point.append([landmark_x, landmark_y])
@@ -54,7 +56,11 @@ def pre_process_landmark(landmark_list):
 
 
 # Load trained model
-model = joblib.load("asl_model.pkl")
+try:
+    model = joblib.load("asl_model.pkl")
+    MODEL_LOADED = True
+except:
+    MODEL_LOADED = False
 
 # Store past 20 frames of finger tips
 index_history = deque(maxlen=20)  # For Z
@@ -71,6 +77,7 @@ mp_drawing = mp.solutions.drawing_utils
 cooldown = 0
 z_static_ready = False
 z_motion_timeout = 0  # countdown after Z is triggered by static gesture
+
 
 def is_mostly_stationary(points, threshold=0.02):
     xs = [p[0] for p in points]
@@ -199,34 +206,375 @@ def start_inference():
     cv2.destroyAllWindows()
 
 
-def show_instructions():
-    instructions = (
-        "Welcome to ASL Recognition!\n\n"
-        "- Click 'Start' to begin webcam-based gesture recognition.\n"
-        "- Show static hand signs clearly in front of the camera.\n"
-        "- For letter 'Z', draw a 'Z' shape with your index finger after making the 'Z' sign.\n"
-        "- Press 'ESC' to exit the webcam window."
-    )
-    messagebox.showinfo("How To Use", instructions)
+class ModernASLApp:
+    def __init__(self):
+        self.root = tk.Tk()
+        self.setup_window()
+        self.create_widgets()
+
+    def setup_window(self):
+        self.root.title("ASL Recognition System")
+        self.root.geometry("600x700")
+        self.root.resizable(False, False)
+
+        # Configure colors
+        self.colors = {
+            'primary': '#2C3E50',
+            'secondary': '#3498DB',
+            'accent': '#E74C3C',
+            'success': '#27AE60',
+            'background': '#ECF0F1',
+            'card': '#FFFFFF',
+            'text': '#2C3E50',
+            'text_light': '#7F8C8D'
+        }
+
+        self.root.configure(bg=self.colors['background'])
+
+        # Configure styles
+        self.setup_styles()
+
+    def setup_styles(self):
+        style = ttk.Style()
+
+        # Configure button styles
+        style.configure('Primary.TButton',
+                        font=('Segoe UI', 12, 'bold'),
+                        padding=(20, 15))
+
+        style.configure('Secondary.TButton',
+                        font=('Segoe UI', 10),
+                        padding=(15, 10))
+
+        style.configure('Status.TLabel',
+                        font=('Segoe UI', 10),
+                        foreground=self.colors['text_light'])
+
+    def create_widgets(self):
+        # Main container
+        main_frame = tk.Frame(self.root, bg=self.colors['background'])
+        main_frame.pack(fill='both', expand=True, padx=30, pady=30)
+
+        # Header section
+        self.create_header(main_frame)
+
+        # Status card
+        self.create_status_card(main_frame)
+
+        # Main action card
+        self.create_action_card(main_frame)
+
+        # Information card
+        self.create_info_card(main_frame)
+
+        # Footer
+        self.create_footer(main_frame)
+
+    def create_header(self, parent):
+        header_frame = tk.Frame(parent, bg=self.colors['background'])
+        header_frame.pack(fill='x', pady=(0, 30))
+
+        # App icon/logo placeholder
+        icon_frame = tk.Frame(header_frame,
+                              bg=self.colors['secondary'],
+                              width=60, height=60)
+        icon_frame.pack_propagate(False)
+        icon_frame.pack(side='left')
+
+        icon_label = tk.Label(icon_frame,
+                              text="✋",
+                              font=('Segoe UI', 24),
+                              bg=self.colors['secondary'],
+                              fg='white')
+        icon_label.pack(expand=True)
+
+        # Title and subtitle
+        title_frame = tk.Frame(header_frame, bg=self.colors['background'])
+        title_frame.pack(side='left', padx=(20, 0), fill='x', expand=True)
+
+        title_label = tk.Label(title_frame,
+                               text="ASL Recognition System",
+                               font=('Segoe UI', 24, 'bold'),
+                               bg=self.colors['background'],
+                               fg=self.colors['primary'])
+        title_label.pack(anchor='w')
+
+        subtitle_label = tk.Label(title_frame,
+                                  text="Real-time American Sign Language Detection",
+                                  font=('Segoe UI', 12),
+                                  bg=self.colors['background'],
+                                  fg=self.colors['text_light'])
+        subtitle_label.pack(anchor='w')
+
+    def create_status_card(self, parent):
+        status_card = tk.Frame(parent,
+                               bg=self.colors['card'],
+                               relief='flat',
+                               bd=1)
+        status_card.pack(fill='x', pady=(0, 20))
+
+        # Add subtle shadow effect
+        shadow = tk.Frame(parent, bg='#BDC3C7', height=2)
+        shadow.pack(fill='x', pady=(0, 18))
+
+        status_inner = tk.Frame(status_card, bg=self.colors['card'])
+        status_inner.pack(fill='both', expand=True, padx=25, pady=20)
+
+        status_title = tk.Label(status_inner,
+                                text="System Status",
+                                font=('Segoe UI', 14, 'bold'),
+                                bg=self.colors['card'],
+                                fg=self.colors['primary'])
+        status_title.pack(anchor='w')
+
+        # Model status
+        model_status_frame = tk.Frame(status_inner, bg=self.colors['card'])
+        model_status_frame.pack(fill='x', pady=(10, 5))
+
+        status_color = self.colors['success'] if MODEL_LOADED else self.colors['accent']
+        status_text = "✓ Model Loaded Successfully" if MODEL_LOADED else "✗ Model Not Found"
+
+        status_indicator = tk.Label(model_status_frame,
+                                    text="●",
+                                    font=('Segoe UI', 16),
+                                    fg=status_color,
+                                    bg=self.colors['card'])
+        status_indicator.pack(side='left')
+
+        status_label = tk.Label(model_status_frame,
+                                text=status_text,
+                                font=('Segoe UI', 11),
+                                bg=self.colors['card'],
+                                fg=self.colors['text'])
+        status_label.pack(side='left', padx=(10, 0))
+
+        # Camera status
+        camera_frame = tk.Frame(status_inner, bg=self.colors['card'])
+        camera_frame.pack(fill='x', pady=5)
+
+        camera_indicator = tk.Label(camera_frame,
+                                    text="●",
+                                    font=('Segoe UI', 16),
+                                    fg=self.colors['text_light'],
+                                    bg=self.colors['card'])
+        camera_indicator.pack(side='left')
+
+        camera_label = tk.Label(camera_frame,
+                                text="Camera Ready",
+                                font=('Segoe UI', 11),
+                                bg=self.colors['card'],
+                                fg=self.colors['text'])
+        camera_label.pack(side='left', padx=(10, 0))
+
+    def create_action_card(self, parent):
+        action_card = tk.Frame(parent,
+                               bg=self.colors['card'],
+                               relief='flat',
+                               bd=1)
+        action_card.pack(fill='x', pady=20)
+
+        # Shadow
+        shadow = tk.Frame(parent, bg='#BDC3C7', height=2)
+        shadow.pack(fill='x', pady=(0, 18))
+
+        action_inner = tk.Frame(action_card, bg=self.colors['card'])
+        action_inner.pack(fill='both', expand=True, padx=25, pady=30)
+
+        # Start button
+        start_button = tk.Button(action_inner,
+                                 text="🎥 Start Recognition",
+                                 font=('Segoe UI', 16, 'bold'),
+                                 bg=self.colors['secondary'],
+                                 fg='white',
+                                 relief='flat',
+                                 bd=0,
+                                 padx=40,
+                                 pady=15,
+                                 cursor='hand2',
+                                 command=self.start_recognition)
+        start_button.pack(pady=(0, 15))
+
+        # Add hover effect
+        def on_enter(e):
+            start_button.configure(bg='#2980B9')
+
+        def on_leave(e):
+            start_button.configure(bg=self.colors['secondary'])
+
+        start_button.bind("<Enter>", on_enter)
+        start_button.bind("<Leave>", on_leave)
+
+        # Instructions button
+        instructions_button = tk.Button(action_inner,
+                                        text="📋 How to Use",
+                                        font=('Segoe UI', 12),
+                                        bg=self.colors['background'],
+                                        fg=self.colors['text'],
+                                        relief='flat',
+                                        bd=1,
+                                        padx=30,
+                                        pady=10,
+                                        cursor='hand2',
+                                        command=self.show_instructions)
+        instructions_button.pack()
+
+    def create_info_card(self, parent):
+        info_card = tk.Frame(parent,
+                             bg=self.colors['card'],
+                             relief='flat',
+                             bd=1)
+        info_card.pack(fill='both', expand=True, pady=20)
+
+        # Shadow
+        shadow = tk.Frame(parent, bg='#BDC3C7', height=2)
+        shadow.pack(fill='x', pady=(0, 18))
+
+        info_inner = tk.Frame(info_card, bg=self.colors['card'])
+        info_inner.pack(fill='both', expand=True, padx=25, pady=20)
+
+        info_title = tk.Label(info_inner,
+                              text="Quick Guide",
+                              font=('Segoe UI', 14, 'bold'),
+                              bg=self.colors['card'],
+                              fg=self.colors['primary'])
+        info_title.pack(anchor='w', pady=(0, 15))
+
+        # Guide steps
+        steps = [
+            "1. Ensure good lighting and clear background",
+            "2. Position your hand clearly in front of the camera",
+            "3. Make distinct ASL gestures",
+            "4. For letter 'Z', draw the shape with your index finger",
+            "5. Press ESC to exit the recognition window"
+        ]
+
+        for step in steps:
+            step_label = tk.Label(info_inner,
+                                  text=step,
+                                  font=('Segoe UI', 10),
+                                  bg=self.colors['card'],
+                                  fg=self.colors['text'],
+                                  justify='left')
+            step_label.pack(anchor='w', pady=2)
+
+    def create_footer(self, parent):
+        footer_frame = tk.Frame(parent, bg=self.colors['background'])
+        footer_frame.pack(side='bottom', fill='x', pady=(20, 0))
+
+        footer_label = tk.Label(footer_frame,
+                                text="Powered by MediaPipe & OpenCV",
+                                font=('Segoe UI', 9),
+                                bg=self.colors['background'],
+                                fg=self.colors['text_light'])
+        footer_label.pack(side='right')
+
+    def start_recognition(self):
+        if not MODEL_LOADED:
+            messagebox.showerror("Error",
+                                 "Model file 'asl_model.pkl' not found!\nPlease ensure the model file is in the same directory.")
+            return
+
+        self.root.withdraw()  # Hide the main window
+        threading.Thread(target=self.run_cv_loop, daemon=True).start()
+
+    def run_cv_loop(self):
+        try:
+            start_inference()
+        except Exception as e:
+            messagebox.showerror("Error", f"An error occurred: {str(e)}")
+        finally:
+            self.root.destroy()
+
+    def show_instructions(self):
+        instructions_window = tk.Toplevel(self.root)
+        instructions_window.title("How to Use - ASL Recognition")
+        instructions_window.geometry("500x600")
+        instructions_window.configure(bg=self.colors['background'])
+        instructions_window.resizable(False, False)
+
+        # Make it modal
+        instructions_window.transient(self.root)
+        instructions_window.grab_set()
+
+        # Center the window
+        instructions_window.geometry("+{}+{}".format(
+            int(instructions_window.winfo_screenwidth() / 2 - 250),
+            int(instructions_window.winfo_screenheight() / 2 - 300)
+        ))
+
+        main_frame = tk.Frame(instructions_window, bg=self.colors['background'])
+        main_frame.pack(fill='both', expand=True, padx=30, pady=30)
+
+        # Title
+        title = tk.Label(main_frame,
+                         text="How to Use ASL Recognition",
+                         font=('Segoe UI', 18, 'bold'),
+                         bg=self.colors['background'],
+                         fg=self.colors['primary'])
+        title.pack(pady=(0, 20))
+
+        # Instructions text
+        instructions_text = """
+Getting Started:
+• Click 'Start Recognition' to launch the camera interface
+• Position yourself 2-3 feet from the camera
+• Ensure good lighting and minimal background clutter
+
+Making Gestures:
+• Hold your hand steady and clearly visible
+• Make distinct ASL letter signs
+• Wait for the system to recognize each gesture
+• The prediction will appear on screen in real-time
+
+Special Instructions for 'Z':
+• First, make the static 'Z' hand sign
+• When prompted, trace the letter 'Z' in the air with your index finger
+• Draw from top-left to top-right, then diagonal down, then bottom-left to bottom-right
+
+Tips for Best Results:
+• Use consistent hand positioning
+• Avoid rapid movements between gestures
+• Practice gestures beforehand for accuracy
+• Ensure your entire hand is visible in the frame
+
+Troubleshooting:
+• If recognition is poor, adjust lighting
+• Make sure your hand contrasts with the background
+• Try slightly different hand positions
+• Press ESC to exit and restart if needed
+        """
+
+        text_widget = tk.Text(main_frame,
+                              wrap='word',
+                              font=('Segoe UI', 10),
+                              bg=self.colors['card'],
+                              fg=self.colors['text'],
+                              relief='flat',
+                              bd=0,
+                              padx=20,
+                              pady=20)
+        text_widget.pack(fill='both', expand=True)
+        text_widget.insert('1.0', instructions_text.strip())
+        text_widget.configure(state='disabled')
+
+        # Close button
+        close_button = tk.Button(main_frame,
+                                 text="Got it!",
+                                 font=('Segoe UI', 12, 'bold'),
+                                 bg=self.colors['secondary'],
+                                 fg='white',
+                                 relief='flat',
+                                 bd=0,
+                                 padx=30,
+                                 pady=10,
+                                 cursor='hand2',
+                                 command=instructions_window.destroy)
+        close_button.pack(pady=(20, 0))
+
+    def run(self):
+        self.root.mainloop()
 
 
-def run_cv_loop():
-    root.withdraw()  # Hide the main window while OpenCV is running
-    start_inference()
-    root.destroy()   # Close Tkinter when done
-
-
-root = tk.Tk()
-root.title("ASL Gesture Recognition")
-root.geometry("300x200")
-
-title_label = tk.Label(root, text="ASL Recognition", font=("Arial", 16))
-title_label.pack(pady=20)
-
-start_button = tk.Button(root, text="Start", font=("Arial", 14), command=lambda: threading.Thread(target=run_cv_loop).start())
-start_button.pack(pady=10)
-
-howto_button = tk.Button(root, text="How To", font=("Arial", 14), command=show_instructions)
-howto_button.pack(pady=10)
-
-root.mainloop()
+if __name__ == "__main__":
+    app = ModernASLApp()
+    app.run()
